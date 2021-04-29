@@ -229,11 +229,109 @@ long simulated_annealing(long* A) {
 	return residue;
 }
 
+// N.B. Always allocates, caller responsible for freeing.
+long* prepartitioned_generate() {
+	long* S = malloc(sizeof(long)*INTEGERS);
+	for (int i = 0; i < INTEGERS; i++) {
+		S[i] = randindex();
+	}
+	return S;
+}
+
+static inline long prepartitioned_residue(long* A, long* S) {
+	long Aprime[INTEGERS] = { 0 };
+	for (int i = 0; i < INTEGERS; i++) {
+		Aprime[S[i]] += A[i];
+	}
+	return karmarkar_karp(Aprime);
+}
+
+// N.B. Always allocates, caller responsible for freeing.
+long* prepartitioned_neighbor(long* S) {
+	long* Sprime = malloc(sizeof(long)*INTEGERS);
+	memcpy(Sprime, S, sizeof(long)*INTEGERS);
+
+	int i = randindex();
+	int j;
+	do {
+		j = randindex();
+	} while (S[i] == j);
+	Sprime[i] = j;
+
+	return Sprime;
+}
+
+long prepartitioned_repeated_random(long* A) {
+	long* S = prepartitioned_generate();
+	for (int i = 0; i < MAX_ITERATIONS; i++) {
+		long* Sprime = prepartitioned_generate();
+		if (prepartitioned_residue(A, Sprime) < prepartitioned_residue(A, S)) {
+			free(S);
+			S = Sprime;
+		} else {
+			free(Sprime);
+		}
+	}
+	long residue = prepartitioned_residue(A, S);
+	free(S);
+	return residue;
+}
+
+long prepartitioned_hill_climbing(long* A) {
+	long* S = prepartitioned_generate();
+	for (int i = 0; i < MAX_ITERATIONS; i++) {
+		long* Sprime = prepartitioned_neighbor(S);
+		if (prepartitioned_residue(A, Sprime) < prepartitioned_residue(A, S)) {
+			free(S);
+			S = Sprime;
+		} else {
+			free(Sprime);
+		}
+	}
+	long residue = prepartitioned_residue(A, S);
+	free(S);
+	return residue;
+}
+
+long prepartitioned_simulated_annealing(long* A) {
+	long* S = prepartitioned_generate();
+	long* Sprimeprime = S;
+	for (int i = 0; i < MAX_ITERATIONS; i++) {
+		long* Sprime = prepartitioned_neighbor(S);
+
+		long S_residue = prepartitioned_residue(A, S);
+		long Sprime_residue = prepartitioned_residue(A, Sprime);
+
+		if (Sprime_residue < S_residue || rand() < exp(-((double) (Sprime_residue - S_residue))/T(i))*RAND_MAX) {
+			if (S != Sprimeprime) {
+				free(S);
+			}
+			S = Sprime;
+		} else {
+			free(Sprime);
+		}
+
+		if (prepartitioned_residue(A, S) < prepartitioned_residue(A, Sprimeprime)) {
+			free(Sprimeprime);
+			Sprimeprime = S;
+		}
+	}
+	long residue = prepartitioned_residue(A, Sprimeprime);
+	if (Sprimeprime != S) {
+		free(Sprimeprime);
+	}
+	free(S);
+	return residue;
+}
+
 static long (* const ALGORITHMS[])(long* A) = {
 	[KARMARKAR_KARP] = karmarkar_karp,
 	[REPEATED_RANDOM] = repeated_random,
 	[HILL_CLIMBING] = hill_climbing,
-	[SIMULATED_ANNEALING] = simulated_annealing
+	[SIMULATED_ANNEALING] = simulated_annealing,
+	[PREPARTITIONED_REPEATED_RANDOM] = prepartitioned_repeated_random,
+	[PREPARTITIONED_HILL_CLIMBING] = prepartitioned_hill_climbing,
+	[PREPARTITIONED_SIMULATED_ANNEALING] = prepartitioned_simulated_annealing
 };
 
 int main(int argc, char** argv) {

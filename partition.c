@@ -123,20 +123,11 @@ long karmarkar_karp(long* A) {
 	while (heap->size >= 2) {
 		long a = heap_deletemax(heap),
 			b = heap_deletemax(heap);
-		heap_insert(heap, abs(a - b));
+		heap_insert(heap, labs(a - b));
 	}
 	long result = heap_deletemax(heap);
 	heap_free(heap);
-	heap = NULL;
 	return result;
-}
-
-static inline long standard_residue(long* A, long* S) {
-	long residue = 0;
-	for (int i = 0; i < INTEGERS; i++) {
-		residue += S[i]*A[i];
-	}
-	return abs(residue);
 }
 
 // N.B. Always allocates, caller responsible for freeing.
@@ -146,6 +137,14 @@ long* standard_generate() {
 		S[i] = randbool() ? 1 : -1;
 	}
 	return S;
+}
+
+static inline long standard_residue(long* A, long* S) {
+	long residue = 0;
+	for (int i = 0; i < INTEGERS; i++) {
+		residue += S[i]*A[i];
+	}
+	return labs(residue);
 }
 
 // N.B. Always allocates, caller responsible for freeing.

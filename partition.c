@@ -115,7 +115,7 @@ long heap_deletemax(struct heap* heap) {
 	return max;
 }
 
-long karmarkar_karp(long* A) {
+long karmarkar_karp(__attribute__((unused)) bool prepartitioned, long* A) { // KK doesn't generate solutions, so prepartitioned parameter is meaningless.
 	struct heap* heap = heap_new(INTEGERS);
 	for (int i = 0; i < INTEGERS; i++) {
 		heap_insert(heap, A[i]);
@@ -131,81 +131,99 @@ long karmarkar_karp(long* A) {
 }
 
 // N.B. Always allocates, caller responsible for freeing.
-long* standard_generate() {
+long* solution_new(bool prepartitioned) {
 	long* S = malloc(sizeof(long)*INTEGERS);
 	for (int i = 0; i < INTEGERS; i++) {
-		S[i] = randbool() ? 1 : -1;
+		S[i] = prepartitioned ? randindex() : (randbool() ? 1 : -1);
 	}
 	return S;
 }
 
-static inline long standard_residue(long* A, long* S) {
-	long residue = 0;
-	for (int i = 0; i < INTEGERS; i++) {
-		residue += S[i]*A[i];
+static inline long solution_residue(bool prepartitioned, long* A, long* S) {
+	if (prepartitioned) {
+		long Aprime[INTEGERS] = { 0 };
+		for (int i = 0; i < INTEGERS; i++) {
+			Aprime[S[i]] += A[i];
+		}
+		return karmarkar_karp(true, Aprime);
+	} else {
+		long residue = 0;
+		for (int i = 0; i < INTEGERS; i++) {
+			residue += S[i]*A[i];
+		}
+		return labs(residue);
 	}
-	return labs(residue);
 }
 
 // N.B. Always allocates, caller responsible for freeing.
-long* standard_neighbor(long* S) {
+long* solution_neighbor(bool prepartitioned, long* S) {
 	long* Sprime = malloc(sizeof(long)*INTEGERS);
 	memcpy(Sprime, S, sizeof(long)*INTEGERS);
-	int i = randindex();
-	Sprime[i] = -Sprime[i];
 
-	// Swap with 50% probability:
-	if (randbool()) {
+	int i = randindex();
+
+	if (prepartitioned) {
 		int j;
 		do {
 			j = randindex();
-		} while (j == i);
-		Sprime[j] = -Sprime[j];
+		} while (S[i] == j);
+		Sprime[i] = j;
+	} else {
+		Sprime[i] = -Sprime[i];
+
+		// Swap with 50% probability:
+		if (randbool()) {
+			int j;
+			do {
+				j = randindex();
+			} while (j == i);
+			Sprime[j] = -Sprime[j];
+		}
 	}
 
 	return Sprime;
 }
 
-long repeated_random(long* A) {
-	long* S = standard_generate();
+long repeated_random(bool prepartitioned, long* A) {
+	long* S = solution_new(prepartitioned);
 	for (int i = 0; i < MAX_ITERATIONS; i++) {
-		long* Sprime = standard_generate();
-		if (standard_residue(A, Sprime) < standard_residue(A, S)) {
+		long* Sprime = solution_new(prepartitioned);
+		if (solution_residue(prepartitioned, A, Sprime) < solution_residue(prepartitioned, A, S)) {
 			free(S);
 			S = Sprime;
 		} else {
 			free(Sprime);
 		}
 	}
-	long residue = standard_residue(A, S);
+	long residue = solution_residue(prepartitioned, A, S);
 	free(S);
 	return residue;
 }
 
-long hill_climbing(long* A) {
-	long* S = standard_generate();
+long hill_climbing(bool prepartitioned, long* A) {
+	long* S = solution_new(prepartitioned);
 	for (int i = 0; i < MAX_ITERATIONS; i++) {
-		long* Sprime = standard_neighbor(S);
-		if (standard_residue(A, Sprime) < standard_residue(A, S)) {
+		long* Sprime = solution_neighbor(prepartitioned, S);
+		if (solution_residue(prepartitioned, A, Sprime) < solution_residue(prepartitioned, A, S)) {
 			free(S);
 			S = Sprime;
 		} else {
 			free(Sprime);
 		}
 	}
-	long residue = standard_residue(A, S);
+	long residue = solution_residue(prepartitioned, A, S);
 	free(S);
 	return residue;
 }
 
-long simulated_annealing(long* A) {
-	long* S = standard_generate();
+long simulated_annealing(bool prepartitioned, long* A) {
+	long* S = solution_new(prepartitioned);
 	long* Sprimeprime = S;
 	for (int i = 0; i < MAX_ITERATIONS; i++) {
-		long* Sprime = standard_neighbor(S);
+		long* Sprime = solution_neighbor(prepartitioned, S);
 
-		long S_residue = standard_residue(A, S);
-		long Sprime_residue = standard_residue(A, Sprime);
+		long S_residue = solution_residue(prepartitioned, A, S);
+		long Sprime_residue = solution_residue(prepartitioned, A, Sprime);
 
 		if (Sprime_residue < S_residue || rand() < exp(-((double) (Sprime_residue - S_residue))/T(i))*RAND_MAX) {
 			if (S != Sprimeprime) {
@@ -216,12 +234,12 @@ long simulated_annealing(long* A) {
 			free(Sprime);
 		}
 
-		if (standard_residue(A, S) < standard_residue(A, Sprimeprime)) {
+		if (solution_residue(prepartitioned, A, S) < solution_residue(prepartitioned, A, Sprimeprime)) {
 			free(Sprimeprime);
 			Sprimeprime = S;
 		}
 	}
-	long residue = standard_residue(A, Sprimeprime);
+	long residue = solution_residue(prepartitioned, A, Sprimeprime);
 	if (Sprimeprime != S) {
 		free(Sprimeprime);
 	}
@@ -229,109 +247,11 @@ long simulated_annealing(long* A) {
 	return residue;
 }
 
-// N.B. Always allocates, caller responsible for freeing.
-long* prepartitioned_generate() {
-	long* S = malloc(sizeof(long)*INTEGERS);
-	for (int i = 0; i < INTEGERS; i++) {
-		S[i] = randindex();
-	}
-	return S;
-}
-
-static inline long prepartitioned_residue(long* A, long* S) {
-	long Aprime[INTEGERS] = { 0 };
-	for (int i = 0; i < INTEGERS; i++) {
-		Aprime[S[i]] += A[i];
-	}
-	return karmarkar_karp(Aprime);
-}
-
-// N.B. Always allocates, caller responsible for freeing.
-long* prepartitioned_neighbor(long* S) {
-	long* Sprime = malloc(sizeof(long)*INTEGERS);
-	memcpy(Sprime, S, sizeof(long)*INTEGERS);
-
-	int i = randindex();
-	int j;
-	do {
-		j = randindex();
-	} while (S[i] == j);
-	Sprime[i] = j;
-
-	return Sprime;
-}
-
-long prepartitioned_repeated_random(long* A) {
-	long* S = prepartitioned_generate();
-	for (int i = 0; i < MAX_ITERATIONS; i++) {
-		long* Sprime = prepartitioned_generate();
-		if (prepartitioned_residue(A, Sprime) < prepartitioned_residue(A, S)) {
-			free(S);
-			S = Sprime;
-		} else {
-			free(Sprime);
-		}
-	}
-	long residue = prepartitioned_residue(A, S);
-	free(S);
-	return residue;
-}
-
-long prepartitioned_hill_climbing(long* A) {
-	long* S = prepartitioned_generate();
-	for (int i = 0; i < MAX_ITERATIONS; i++) {
-		long* Sprime = prepartitioned_neighbor(S);
-		if (prepartitioned_residue(A, Sprime) < prepartitioned_residue(A, S)) {
-			free(S);
-			S = Sprime;
-		} else {
-			free(Sprime);
-		}
-	}
-	long residue = prepartitioned_residue(A, S);
-	free(S);
-	return residue;
-}
-
-long prepartitioned_simulated_annealing(long* A) {
-	long* S = prepartitioned_generate();
-	long* Sprimeprime = S;
-	for (int i = 0; i < MAX_ITERATIONS; i++) {
-		long* Sprime = prepartitioned_neighbor(S);
-
-		long S_residue = prepartitioned_residue(A, S);
-		long Sprime_residue = prepartitioned_residue(A, Sprime);
-
-		if (Sprime_residue < S_residue || rand() < exp(-((double) (Sprime_residue - S_residue))/T(i))*RAND_MAX) {
-			if (S != Sprimeprime) {
-				free(S);
-			}
-			S = Sprime;
-		} else {
-			free(Sprime);
-		}
-
-		if (prepartitioned_residue(A, S) < prepartitioned_residue(A, Sprimeprime)) {
-			free(Sprimeprime);
-			Sprimeprime = S;
-		}
-	}
-	long residue = prepartitioned_residue(A, Sprimeprime);
-	if (Sprimeprime != S) {
-		free(Sprimeprime);
-	}
-	free(S);
-	return residue;
-}
-
-static long (* const ALGORITHMS[])(long* A) = {
+static long (* const ALGORITHMS[])(bool prepartitioned, long* A) = {
 	[KARMARKAR_KARP] = karmarkar_karp,
 	[REPEATED_RANDOM] = repeated_random,
 	[HILL_CLIMBING] = hill_climbing,
 	[SIMULATED_ANNEALING] = simulated_annealing,
-	[PREPARTITIONED_REPEATED_RANDOM] = prepartitioned_repeated_random,
-	[PREPARTITIONED_HILL_CLIMBING] = prepartitioned_hill_climbing,
-	[PREPARTITIONED_SIMULATED_ANNEALING] = prepartitioned_simulated_annealing
 };
 
 int main(int argc, char** argv) {
@@ -363,7 +283,7 @@ int main(int argc, char** argv) {
 	}
 	fclose(input);
 
-	printf("%ld\n", ALGORITHMS[algorithm](A));
+	printf("%ld\n", ALGORITHMS[algorithm%10](algorithm/10, A));
 
 	return 0;
 }
